@@ -718,6 +718,17 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
   final Map<String, Timer?> _debounceTimers = {};
   static const int _maxCacheSize = 1000;
 
+  // Unicode-aware so non-ASCII letters (ü, ß, é, ...) and combining marks
+  // (NFD input, e.g. macOS dead keys) stay part of the word token.
+  static final _spellCheckTokenReg = RegExp(
+    r'[\p{L}\p{M}\p{N}_]+|[^\p{L}\p{M}\p{N}_]+',
+    unicode: true,
+  );
+  static final _spellCheckWordReg = RegExp(
+    r'^[\p{L}\p{M}\p{N}_]+$',
+    unicode: true,
+  );
+
   List<InlineSpan> _buildTextSpansWithSpellCheck(
     BuildContext context,
     TextInsert textInsert,
@@ -727,16 +738,17 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     final textSpans = <InlineSpan>[];
     // Split the insert text into word and non-word tokens so we can
     // underline misspelled words and attach hover suggestion UI.
-    final tokenReg = RegExp(r"([\wüäöÜÄÖ]+|[^\w]+)");
-    final tokens =
-        tokenReg.allMatches(textInsert.text).map((m) => m.group(0)!).toList();
+    final tokens = _spellCheckTokenReg
+        .allMatches(textInsert.text)
+        .map((m) => m.group(0)!)
+        .toList();
     int innerIndex = 0;
 
     final config = spellCheckConfiguration;
 
     for (int i = 0; i < tokens.length; i++) {
       final token = tokens[i];
-      final isWord = RegExp(r"^\w+$").hasMatch(token);
+      final isWord = _spellCheckWordReg.hasMatch(token);
       if (isWord) {
         final word = token;
 
@@ -750,7 +762,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
           final nextToken = isLastToken ? null : tokens[i + 1];
           // Only check if there's a next token AND it's whitespace/punctuation (not a word)
           shouldCheck =
-              nextToken != null && !RegExp(r"^\w+$").hasMatch(nextToken);
+              nextToken != null && !_spellCheckWordReg.hasMatch(nextToken);
         }
 
         // Check exclude patterns

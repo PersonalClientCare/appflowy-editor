@@ -1,6 +1,7 @@
 use hunspell_rs::{CheckResult, Hunspell};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
+use unicode_normalization::UnicodeNormalization;
 
 /// Initializes the Hunspell engine and returns a pointer to it.
 #[unsafe(no_mangle)]
@@ -17,7 +18,10 @@ pub extern "C" fn hunspell_init(aff_path: *const c_char, dic_path: *const c_char
 pub extern "C" fn hunspell_check(handle: *mut c_void, word: *const c_char) -> bool {
     let hunspell = unsafe { &*(handle as *mut Hunspell) };
     let w = unsafe { CStr::from_ptr(word) }.to_str().unwrap();
-    let res = hunspell.check(w);
+    // Dictionaries store precomposed (NFC) text; normalize so decomposed
+    // input (e.g. macOS dead-key umlauts) still matches.
+    let w: String = w.nfc().collect();
+    let res = hunspell.check(&w);
     res == CheckResult::FoundInDictionary
 }
 
@@ -30,8 +34,9 @@ pub extern "C" fn hunspell_suggest(
 ) -> *mut c_char {
     let hunspell = unsafe { &*(handle as *mut Hunspell) };
     let w = unsafe { CStr::from_ptr(word) }.to_str().unwrap();
+    let w: String = w.nfc().collect();
 
-    let suggestions = hunspell.suggest(w);
+    let suggestions = hunspell.suggest(&w);
     let result = suggestions
         .into_iter()
         .take(max_suggestions)

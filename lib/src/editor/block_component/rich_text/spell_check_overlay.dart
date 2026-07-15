@@ -66,9 +66,12 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
     });
   }
 
+  // Unicode-aware so non-ASCII letters (ü, ß, é, ...) and combining marks
+  // (NFD input) count as word characters.
+  static final _wordReg = RegExp(r'^[\p{L}\p{M}\p{N}_]+$', unicode: true);
+
   bool _isValidWordForSpellCheck(String word) {
-    return RegExp(r'^\w+$').hasMatch(word) &&
-        word.length >= _minWordLengthForCheck;
+    return _wordReg.hasMatch(word) && word.length >= _minWordLengthForCheck;
   }
 
   ({Offset position, String word, int start, int length})? _getWordAtPosition(
@@ -215,7 +218,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
 
     // Clear the old word from cache since it's been replaced
     if (_hoveredWord != null) {
-      widget.misspelledCache.remove(_hoveredWord!.toLowerCase());
+      widget.misspelledCache.remove(_hoveredWord!);
     }
   }
 
@@ -234,7 +237,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
       return;
     }
 
-    final isMisspelled = widget.misspelledCache[word.toLowerCase()] == true;
+    final isMisspelled = widget.misspelledCache[word] == true;
 
     if (isMisspelled) {
       // Hovering on a misspelled word

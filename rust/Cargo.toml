@@ -8,3 +8,4 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 hunspell-rs = { git = "https://github.com/PersonalClientCare/hunspell-rs.git", branch = "master" }
+unicode-normalization = "0.1"
