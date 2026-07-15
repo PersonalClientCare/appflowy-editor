@@ -21,6 +21,12 @@
       {
         "type": "paragraph",
         "data": {
+          "delta": [{ "insert": "Hier direkt ein deutscher Beispielsatz" }]
+        }
+      },
+      {
+        "type": "paragraph",
+        "data": {
           "delta": [
             { "insert": "AppFlowy Editor is a" },
             { "insert": " " },

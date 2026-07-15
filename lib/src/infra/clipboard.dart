@@ -39,8 +39,10 @@ class AppFlowyClipboard {
     }
 
     final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final sanitizedText = data?.text?.replaceAll('\r\n\r\n', '\n').replaceAll('\r\n', '\n');
+
     return AppFlowyClipboardData(
-      text: data?.text,
+      text: sanitizedText,
       html: null,
     );
   }

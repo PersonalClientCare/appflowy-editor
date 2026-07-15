@@ -36,17 +36,41 @@ class ApplyOptions {
   const ApplyOptions({
     this.recordUndo = true,
     this.recordRedo = false,
+    this.source,
     this.inMemoryUpdate = false,
   });
 
-  /// This flag indicates that
-  /// whether the transaction should be recorded into
-  /// the undo stack
+  /// Whether the transaction should be recorded into the undo stack.
+  @Deprecated('Use [source] instead')
   final bool recordUndo;
+
+  @Deprecated('Use [source] instead')
   final bool recordRedo;
+
+  /// The source of the transaction. When set, takes precedence over
+  /// the legacy `recordUndo` and `recordRedo` flags for determining
+  /// how the transaction is recorded in the undo/redo history.
+  final TransactionSource? source;
 
   /// This flag used to determine whether the transaction is in-memory update.
   final bool inMemoryUpdate;
+
+  /// Returns the resolved [TransactionSource].
+  /// Prefers explicit [source], falls back to legacy boolean flags.
+  ///
+  /// Legacy mapping (for backward compatibility):
+  /// - `recordRedo: true` → [TransactionSource.undo] (records *to* redo stack)
+  /// - `recordUndo: true` → [TransactionSource.userEdit]
+  /// - both false → [TransactionSource.none]
+  TransactionSource get resolvedSource {
+    if (source != null) return source!;
+    // ignore: deprecated_member_use_from_same_package
+    if (recordRedo) return TransactionSource.undo;
+    // ignore: deprecated_member_use_from_same_package
+    if (recordUndo) return TransactionSource.userEdit;
+
+    return TransactionSource.none;
+  }
 }
 
 @Deprecated('use SelectionUpdateReason instead')
@@ -260,6 +284,7 @@ class EditorState {
   Transaction get transaction {
     final transaction = Transaction(document: document);
     transaction.beforeSelection = selection;
+
     return transaction;
   }
 
@@ -269,12 +294,19 @@ class EditorState {
   bool enableAutoComplete = false;
   AppFlowyAutoCompleteTextProvider? autoCompleteTextProvider;
 
+  bool enableSpellChecker = false;
+  AppFlowySpellCheckConfiguration? spellCheckConfiguration;
+
+  // whether the editor state should carry over the set alignment into new paragraphs
+  bool keepParagraphAlignment = false;
+
   // only used for testing
   bool disableSealTimer = false;
 
   /// The rules to apply to the document.
   List<DocumentRule> get documentRules => _documentRules;
   List<DocumentRule> _documentRules = [];
+
   set documentRules(List<DocumentRule> value) {
     _documentRules = value;
 
@@ -318,6 +350,7 @@ class EditorState {
     if (renderObject != null && renderObject is RenderBox) {
       return renderObject;
     }
+
     return null;
   }
 
@@ -363,6 +396,7 @@ class EditorState {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       completer.complete();
     });
+
     return completer.future;
   }
 
@@ -667,14 +701,11 @@ class EditorState {
     Transaction transaction,
     bool skipDebounce,
   ) {
-    if (options.recordUndo) {
-      final undoItem = undoManager.getUndoHistoryItem();
-      undoItem.addAll(transaction.operations);
-      if (undoItem.beforeSelection == null &&
-          transaction.beforeSelection != null) {
-        undoItem.beforeSelection = transaction.beforeSelection;
-      }
-      undoItem.afterSelection = transaction.afterSelection;
+    final source = options.resolvedSource;
+    undoManager.record(transaction, source);
+
+    // Only debounce-seal for user edits (grouping consecutive keystrokes).
+    if (source == TransactionSource.userEdit) {
       if (skipDebounce && undoManager.undoStack.isNonEmpty) {
         AppFlowyEditorLog.editor.debug('Seal history item');
         final last = undoManager.undoStack.last;
@@ -682,12 +713,6 @@ class EditorState {
       } else {
         _debouncedSealHistoryItem();
       }
-    } else if (options.recordRedo) {
-      final redoItem = HistoryItem();
-      redoItem.addAll(transaction.operations);
-      redoItem.beforeSelection = transaction.beforeSelection;
-      redoItem.afterSelection = transaction.afterSelection;
-      undoManager.redoStack.push(redoItem);
     }
   }
 
@@ -710,7 +735,11 @@ class EditorState {
       AppFlowyEditorLog.editor.debug('apply op (local): ${op.toJson()}');
 
       if (op is InsertOperation) {
-        document.insert(op.path, op.nodes);
+        document.insert(
+          op.path,
+          op.nodes,
+          keepParagraphAlignment: keepParagraphAlignment,
+        );
       } else if (op is UpdateOperation) {
         // ignore the update operation if the attributes are the same.
         if (!mapEquals(op.attributes, op.oldAttributes)) {
@@ -731,7 +760,10 @@ class EditorState {
       AppFlowyEditorLog.editor.debug('apply op (remote): ${op.toJson()}');
 
       if (op is InsertOperation) {
-        document.insert(op.path, op.nodes);
+        document.insert(
+          op.path,
+          op.nodes,
+        );
         if (selection != null) {
           if (op.path <= selection.start.path) {
             selection = Selection(

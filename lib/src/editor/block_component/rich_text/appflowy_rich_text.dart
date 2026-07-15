@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_editor/src/editor/block_component/rich_text/spell_check_overlay.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -125,6 +127,11 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
   bool get enableAutoComplete =>
       widget.editorState.enableAutoComplete && autoCompleteTextProvider != null;
 
+  bool get enableSpellChecker => widget.editorState.enableSpellChecker;
+
+  AppFlowySpellCheckConfiguration? get spellCheckConfiguration =>
+      widget.editorState.spellCheckConfiguration;
+
   TextStyleConfiguration get textStyleConfiguration =>
       widget.editorState.editorStyle.textStyleConfiguration;
 
@@ -132,10 +139,42 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       widget.textSpanOverlayBuilder ??
       widget.editorState.editorStyle.textSpanOverlayBuilder;
 
+  TextAlign get _resolvedTextAlign {
+    if (widget.textAlign != null) {
+      return widget.textAlign!;
+    }
+
+    if (widget.editorState.keepParagraphAlignment) {
+      final align = widget.node.previous?.attributes['align'] as String?;
+      switch (align) {
+        case 'center':
+          return TextAlign.center;
+        case 'right':
+          return TextAlign.right;
+        case 'justify':
+          return TextAlign.justify;
+        case 'left':
+          return TextAlign.left;
+      }
+    }
+
+    return TextAlign.start;
+  }
+
   @override
   void initState() {
     super.initState();
     confirmContextEnabled();
+  }
+
+  @override
+  void dispose() {
+    // Cancel all pending spell check timers to prevent memory leaks
+    for (final timer in _debounceTimers.values) {
+      timer?.cancel();
+    }
+    _debounceTimers.clear();
+    super.dispose();
   }
 
   @override
@@ -145,6 +184,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         _buildPlaceholderText(context),
         _buildRichText(context),
         ..._buildRichTextOverlay(context),
+        if (enableSpellChecker) _buildSpellCheckOverlay(),
       ],
     );
 
@@ -248,6 +288,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       widget.cursorWidth,
       cursorHeight ?? 16.0,
     );
+
     return rect;
   }
 
@@ -256,6 +297,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     final offset = _renderParagraph?.globalToLocal(start) ?? Offset.zero;
     final baseOffset =
         _renderParagraph?.getPositionForOffset(offset).offset ?? -1;
+
     return Position(path: widget.node.path, offset: baseOffset);
   }
 
@@ -284,6 +326,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         _renderParagraph?.getWordBoundary(textPosition) ?? TextRange.empty;
     final start = Position(path: widget.node.path, offset: textRange.start);
     final end = Position(path: widget.node.path, offset: textRange.end);
+
     return Selection(start: start, end: end);
   }
 
@@ -294,6 +337,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         _renderParagraph?.getWordBoundary(textPosition) ?? TextRange.empty;
     final start = Position(path: widget.node.path, offset: textRange.start);
     final end = Position(path: widget.node.path, offset: textRange.end);
+
     return Selection(start: start, end: end);
   }
 
@@ -337,10 +381,12 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         height = paragraph?.getFullHeightForCaret(textPosition) ?? height;
         width = 2;
       }
+
       return [
         Rect.fromLTWH(position.dx, position.dy, width, height),
       ];
     }
+
     return rects;
   }
 
@@ -360,6 +406,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         _renderParagraph?.getPositionForOffset(localStart).offset ?? -1;
     final extentOffset =
         _renderParagraph?.getPositionForOffset(localEnd).offset ?? -1;
+
     return Selection.single(
       path: widget.node.path,
       startOffset: baseOffset,
@@ -390,6 +437,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     if (delta != null && delta.isNotEmpty) {
       textSpan = textSpan.copyWith(text: '');
     }
+
     return RichText(
       key: placeholderTextKey,
       textHeightBehavior: TextHeightBehavior(
@@ -404,7 +452,6 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       textScaler: TextScaler.linear(
         widget.editorState.editorStyle.textScaleFactor,
       ),
-      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -415,9 +462,10 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       textSpan = widget.textSpanDecorator!(textSpan);
     }
     textSpan = adjustTextSpan(textSpan);
+
     return RichText(
       key: textKey,
-      textAlign: widget.textAlign ?? TextAlign.start,
+      textAlign: _resolvedTextAlign,
       textHeightBehavior: TextHeightBehavior(
         applyHeightToFirstAscent:
             textStyleConfiguration.applyHeightToFirstAscent,
@@ -434,12 +482,31 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
 
   List<Widget> _buildRichTextOverlay(BuildContext context) {
     if (textKey.currentContext == null) return [];
+
     return textSpanOverlayBuilder?.call(
           context,
           widget.node,
           this,
         ) ??
         [];
+  }
+
+  Widget _buildSpellCheckOverlay() {
+    if (textKey.currentContext == null ||
+        widget.editorState.spellCheckConfiguration == null) {
+      return const SizedBox.shrink();
+    }
+
+    return SpellCheckOverlay(
+      editorState: widget.editorState,
+      node: widget.node,
+      delegate: this,
+      misspelledCache: _misspelledCache,
+      suggestionIcon:
+          widget.editorState.spellCheckConfiguration!.suggestionIcon,
+      highlightColor:
+          widget.editorState.spellCheckConfiguration!.highlightColor,
+    );
   }
 
   void confirmContextEnabled() {
@@ -459,6 +526,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       textSpan = widget.textSpanDecorator!(textSpan);
     }
     textSpan = adjustTextSpan(textSpan);
+
     return ValueListenableBuilder(
       valueListenable: widget.editorState.selectionNotifier,
       builder: (_, __, ___) {
@@ -488,8 +556,9 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
             ),
           ],
         );
+
         return RichText(
-          textAlign: widget.textAlign ?? TextAlign.start,
+          textAlign: _resolvedTextAlign,
           textHeightBehavior: TextHeightBehavior(
             applyHeightToFirstAscent:
                 textStyleConfiguration.applyHeightToFirstAscent,
@@ -524,6 +593,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
             fontSize = max(fontSize, style.fontSize!);
           }
         }
+
         return true;
       });
       if (height == 0.0 || fontSize == 0.0) {
@@ -536,6 +606,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         ),
       );
     }
+
     return textSpan;
   }
 
@@ -611,27 +682,169 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
           );
         }
       }
-      final textSpan = TextSpan(
-        text: textInsert.text,
-        style: textStyle,
-      );
-      textSpans.add(
-        textSpanDecoratorForAttribute != null
+
+      if (enableSpellChecker) {
+        textSpans.addAll(
+          _buildTextSpansWithSpellCheck(context, textInsert, textStyle, offset),
+        );
+      } else {
+        final textSpan = TextSpan(
+          text: textInsert.text,
+          style: textStyle,
+        );
+        textSpans.add(
+          textSpanDecoratorForAttribute != null
+              ? textSpanDecoratorForAttribute!(
+                  context,
+                  widget.node,
+                  offset,
+                  textInsert,
+                  textSpan,
+                  widget.textSpanDecorator?.call(textSpan) ?? textSpan,
+                )
+              : textSpan,
+        );
+      }
+
+      offset += textInsert.length;
+    }
+
+    return TextSpan(
+      children: textSpans,
+    );
+  }
+
+  final Map<String, bool> _misspelledCache = {};
+  final Map<String, Timer?> _debounceTimers = {};
+  static const int _maxCacheSize = 1000;
+
+  List<InlineSpan> _buildTextSpansWithSpellCheck(
+    BuildContext context,
+    TextInsert textInsert,
+    TextStyle textStyle,
+    int offset,
+  ) {
+    final textSpans = <InlineSpan>[];
+    // Split the insert text into word and non-word tokens so we can
+    // underline misspelled words and attach hover suggestion UI.
+    final tokenReg = RegExp(r"([\wüäöÜÄÖ]+|[^\w]+)");
+    final tokens =
+        tokenReg.allMatches(textInsert.text).map((m) => m.group(0)!).toList();
+    int innerIndex = 0;
+
+    final config = spellCheckConfiguration;
+
+    for (int i = 0; i < tokens.length; i++) {
+      final token = tokens[i];
+      final isWord = RegExp(r"^\w+$").hasMatch(token);
+      if (isWord) {
+        final word = token;
+
+        // Check if word should be spell-checked based on configuration
+        bool shouldCheck = word.length >= config!.minWordLength;
+
+        // If checkOnlyCompletedWords is true, only check if next token is whitespace/punctuation
+        // Don't check the last token (still being typed)
+        if (shouldCheck && config.checkOnlyCompletedWords) {
+          final isLastToken = i == tokens.length - 1;
+          final nextToken = isLastToken ? null : tokens[i + 1];
+          // Only check if there's a next token AND it's whitespace/punctuation (not a word)
+          shouldCheck =
+              nextToken != null && !RegExp(r"^\w+$").hasMatch(nextToken);
+        }
+
+        // Check exclude patterns
+        if (shouldCheck) {
+          for (final pattern in config.excludePatterns) {
+            if (pattern.hasMatch(word)) {
+              shouldCheck = false;
+              break;
+            }
+          }
+        }
+
+        // schedule async check for unknown words
+        // cache stored on state (to avoid repeated checks)
+        // IMPORTANT: Pass the original word (not lowercase) so capital letter check works!
+        if (shouldCheck && !_misspelledCache.containsKey(word)) {
+          _checkWord(word);
+        }
+
+        // Only mark as misspelled if we've checked it and confirmed it's wrong
+        final isMisspelled = shouldCheck && _misspelledCache[word] == true;
+
+        final spanStyle = isMisspelled
+            ? textStyle.copyWith(
+                decoration: TextDecoration.underline,
+                decorationStyle: TextDecorationStyle.wavy,
+                decorationColor: Colors.red,
+                decorationThickness: 2,
+              )
+            : textStyle;
+
+        // Always use TextSpan - never WidgetSpan to avoid transaction errors
+        final textSpan = TextSpan(text: word, style: spanStyle);
+        final span = textSpanDecoratorForAttribute != null
             ? textSpanDecoratorForAttribute!(
                 context,
                 widget.node,
-                offset,
+                offset + innerIndex,
                 textInsert,
                 textSpan,
                 widget.textSpanDecorator?.call(textSpan) ?? textSpan,
               )
-            : textSpan,
-      );
-      offset += textInsert.length;
+            : textSpan;
+
+        textSpans.add(span);
+      } else {
+        // non-word token (spaces, punctuation)
+        final textSpan = TextSpan(text: token, style: textStyle);
+        textSpans.add(textSpan);
+      }
+      innerIndex += token.length;
     }
-    return TextSpan(
-      children: textSpans,
-    );
+
+    return textSpans;
+  }
+
+  Future<void> _checkWord(String word) async {
+    final debounceDelay = spellCheckConfiguration!.debounceDelay;
+
+    // Cancel existing timer for this word
+    _debounceTimers[word]?.cancel();
+
+    // If debounce delay is zero, check immediately
+    if (debounceDelay == Duration.zero) {
+      await _performSpellCheck(word);
+    } else {
+      // Schedule check after debounce delay
+      _debounceTimers[word] = Timer(debounceDelay, () async {
+        await _performSpellCheck(word);
+        _debounceTimers.remove(word);
+      });
+    }
+  }
+
+  Future<void> _performSpellCheck(String word) async {
+    try {
+      final exists = await SpellChecker.instance.checkWord(word);
+      final miss = !exists;
+
+      // avoid unnecessary setState
+      if (_misspelledCache[word] != miss) {
+        _misspelledCache[word] = miss;
+
+        // Limit cache size to prevent memory leak in long editing sessions
+        if (_misspelledCache.length > _maxCacheSize) {
+          _misspelledCache.clear();
+        }
+
+        if (mounted) setState(() {});
+      }
+    } catch (e) {
+      // treat as known on error
+      _misspelledCache[word] = false;
+    }
   }
 
   TextSelection? textSelectionFromEditorSelection(Selection? selection) {
@@ -683,6 +896,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         );
       }
     }
+
     return textSelection;
   }
 }
@@ -703,18 +917,21 @@ extension AppFlowyRichTextAttributes on Attributes {
 
   Color? get color {
     final textColor = this[AppFlowyRichTextKeys.textColor] as String?;
+
     return textColor?.tryToColor();
   }
 
   Color? get backgroundColor {
     final highlightColor =
         this[AppFlowyRichTextKeys.backgroundColor] as String?;
+
     return highlightColor?.tryToColor();
   }
 
   Color? get findBackgroundColor {
     final findBackgroundColor =
         this[AppFlowyRichTextKeys.findBackgroundColor] as String?;
+
     return findBackgroundColor?.tryToColor();
   }
 
@@ -722,6 +939,7 @@ extension AppFlowyRichTextAttributes on Attributes {
     if (this[AppFlowyRichTextKeys.href] is String) {
       return this[AppFlowyRichTextKeys.href];
     }
+
     return null;
   }
 
@@ -729,6 +947,7 @@ extension AppFlowyRichTextAttributes on Attributes {
     if (this[AppFlowyRichTextKeys.fontFamily] is String) {
       return this[AppFlowyRichTextKeys.fontFamily];
     }
+
     return null;
   }
 
@@ -736,6 +955,7 @@ extension AppFlowyRichTextAttributes on Attributes {
     if (this[AppFlowyRichTextKeys.fontSize] is double) {
       return this[AppFlowyRichTextKeys.fontSize];
     }
+
     return null;
   }
 

@@ -38,6 +38,8 @@ class AppFlowyEditor extends StatefulWidget {
     this.footer,
     this.focusNode,
     this.enableAutoComplete = false,
+    this.enableSpellChecker = false,
+    this.spellCheckConfiguration,
     this.autoCompleteTextProvider,
     this.dropTargetStyle,
     this.disableSelectionService = false,
@@ -47,6 +49,7 @@ class AppFlowyEditor extends StatefulWidget {
     this.autoScrollEdgeOffset = appFlowyEditorAutoScrollEdgeOffset,
     this.documentRules = const [],
     this.blockWrapper,
+    this.keepParagraphAlignment = false,
   })  : blockComponentBuilders =
             blockComponentBuilders ?? standardBlockComponentBuilderMap,
         characterShortcutEvents =
@@ -179,6 +182,13 @@ class AppFlowyEditor extends StatefulWidget {
   ///   and provide the [autoCompleteTextProvider].
   final bool enableAutoComplete;
 
+  /// If you want to enable the spell checker feature, you must set this value to true
+  final bool enableSpellChecker;
+
+  /// Configuration for spell checking behavior.
+  /// Only used when enableSpellChecker is true.
+  final AppFlowySpellCheckConfiguration? spellCheckConfiguration;
+
   final AppFlowyAutoCompleteTextProvider? autoCompleteTextProvider;
 
   /// {@macro flutter.widgets.editableText.contentInsertionConfiguration}
@@ -230,6 +240,9 @@ class AppFlowyEditor extends StatefulWidget {
   ///
   /// Wrap the block component with a widget.
   final BlockComponentWrapper? blockWrapper;
+
+  /// Whether the editor state should carry over the set alignment into new paragraphs
+  final bool keepParagraphAlignment;
 
   @override
   State<AppFlowyEditor> createState() => _AppFlowyEditorState();
@@ -370,12 +383,22 @@ class _AppFlowyEditorState extends State<AppFlowyEditor> {
     }
   }
 
-  void _updateValues() {
+  void _updateValues() async {
     editorState.editorStyle = widget.editorStyle;
     editorState.editable = widget.editable;
     editorState.showHeader = widget.header != null;
     editorState.showFooter = widget.footer != null;
     editorState.enableAutoComplete = widget.enableAutoComplete;
+    editorState.enableSpellChecker = widget.enableSpellChecker;
+    editorState.spellCheckConfiguration = widget.spellCheckConfiguration;
+    if (widget.enableSpellChecker) {
+      if (widget.spellCheckConfiguration != null) {
+        await SpellChecker.instance.initialize(
+          config: widget.spellCheckConfiguration!,
+        );
+      }
+    }
+    editorState.keepParagraphAlignment = widget.keepParagraphAlignment;
     editorState.autoCompleteTextProvider = widget.autoCompleteTextProvider;
     editorState.disableAutoScroll = widget.disableAutoScroll;
     editorState.autoScrollEdgeOffset = widget.autoScrollEdgeOffset;

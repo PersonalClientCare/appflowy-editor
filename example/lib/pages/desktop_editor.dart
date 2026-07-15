@@ -92,7 +92,13 @@ class _DesktopEditorState extends State<DesktopEditor> {
           blockComponentBuilders: blockComponentBuilders,
           commandShortcutEvents: commandShortcuts,
           editorStyle: editorStyle,
+          keepParagraphAlignment: true,
           enableAutoComplete: true,
+          enableSpellChecker: true,
+          spellCheckConfiguration: const AppFlowySpellCheckConfiguration(
+            affPath: "assets/hunspell/german/de_DE.aff",
+            dicPath: "assets/hunspell/german/de_DE.dic",
+          ),
           autoCompleteTextProvider: _buildAutoCompleteTextProvider,
           dropTargetStyle: const AppFlowyDropTargetStyle(
             color: Colors.red,
@@ -163,6 +169,7 @@ class _DesktopEditorState extends State<DesktopEditor> {
           ),
         ),
       );
+
       // Add a hover menu to the linked text.
       if (rects.isNotEmpty && textInsert.attributes?.href != null) {
         widgets.add(

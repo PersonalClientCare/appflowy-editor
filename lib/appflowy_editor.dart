@@ -14,6 +14,8 @@ export 'src/editor/l10n/appflowy_editor_l10n.dart';
 export 'src/editor/selection_menu/selection_menu.dart';
 // editor state
 export 'src/editor_state.dart';
+// history
+export 'src/history/undo_manager.dart' show TransactionSource;
 // extension
 export 'src/extensions/extensions.dart';
 export 'src/infra/clipboard.dart';
@@ -31,3 +33,4 @@ export 'src/service/default_text_operations/format_rich_text_style.dart';
 export 'src/service/internal_key_event_handlers/copy_paste_handler.dart';
 export 'src/service/shortcut_event/key_mapping.dart';
 export 'src/service/shortcut_event/keybinding.dart';
+export 'src/service/spell_check/spell_check.dart';
