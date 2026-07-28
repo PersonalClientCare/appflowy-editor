@@ -502,10 +502,7 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       node: widget.node,
       delegate: this,
       misspelledCache: _misspelledCache,
-      suggestionIcon:
-          widget.editorState.spellCheckConfiguration!.suggestionIcon,
-      highlightColor:
-          widget.editorState.spellCheckConfiguration!.highlightColor,
+      style: widget.editorState.spellCheckStyle,
     );
   }
 

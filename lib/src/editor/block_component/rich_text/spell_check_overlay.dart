@@ -16,24 +16,16 @@ class SpellCheckOverlay extends StatefulWidget {
     required this.node,
     required this.delegate,
     required this.misspelledCache,
-    this.suggestionIcon,
-    this.highlightColor,
-    this.deleteLabel = 'Delete',
-    this.noSuggestionsLabel = 'No suggestions',
+    this.style = const AppFlowySpellCheckStyle(),
   });
 
   final EditorState editorState;
   final Node node;
   final SelectableMixin delegate;
   final Map<String, bool> misspelledCache;
-  final Widget? suggestionIcon;
-  final Color? highlightColor;
 
-  /// Label of the entry that removes the misspelled word.
-  final String deleteLabel;
-
-  /// Shown when the spell checker has no replacement for the word.
-  final String noSuggestionsLabel;
+  /// Appearance and labels of the suggestions menu.
+  final AppFlowySpellCheckStyle style;
 
   @override
   State<SpellCheckOverlay> createState() => _SpellCheckOverlayState();
@@ -159,10 +151,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
         anchor: anchor.translate(0, _menuVerticalOffset),
         word: word,
         suggestions: suggestions,
-        suggestionIcon: widget.suggestionIcon,
-        highlightColor: widget.highlightColor,
-        deleteLabel: widget.deleteLabel,
-        noSuggestionsLabel: widget.noSuggestionsLabel,
+        style: widget.style,
         onDismiss: _removeOverlay,
         onSelected: (replacement) =>
             _replaceMisspelledWord(replacement, start, length),
@@ -255,10 +244,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
     required this.suggestions,
     required this.onSelected,
     required this.onDismiss,
-    required this.deleteLabel,
-    required this.noSuggestionsLabel,
-    this.suggestionIcon,
-    this.highlightColor,
+    required this.style,
   });
 
   final Offset anchor;
@@ -266,10 +252,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
   final List<String> suggestions;
   final ValueChanged<String> onSelected;
   final VoidCallback onDismiss;
-  final String deleteLabel;
-  final String noSuggestionsLabel;
-  final Widget? suggestionIcon;
-  final Color? highlightColor;
+  final AppFlowySpellCheckStyle style;
 
   static const _screenPadding = 8.0;
 
@@ -277,7 +260,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dividerColor = theme.dividerColor.withAlpha(80);
-    final highlight = highlightColor ?? theme.primaryColor.withAlpha(45);
+    final highlight = style.highlightColor ?? theme.primaryColor.withAlpha(45);
 
     return Stack(
       children: [
@@ -335,7 +318,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
                                 itemBuilder: (context, index) =>
                                     _SuggestionTile(
                                   label: suggestions[index],
-                                  icon: suggestionIcon ??
+                                  icon: style.suggestionIcon ??
                                       const Icon(Icons.auto_fix_high, size: 18),
                                   highlightColor: highlight,
                                   onPressed: () => onSelected(
@@ -346,7 +329,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
                       ),
                       Divider(height: 1.0, color: dividerColor),
                       _SuggestionTile(
-                        label: deleteLabel,
+                        label: style.deleteLabel,
                         icon: const Icon(Icons.delete_outline, size: 18),
                         color: theme.colorScheme.error,
                         highlightColor: highlight,
@@ -396,7 +379,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14.0),
       child: Text(
-        noSuggestionsLabel,
+        style.noSuggestionsLabel,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurface.withAlpha(150),
         ),

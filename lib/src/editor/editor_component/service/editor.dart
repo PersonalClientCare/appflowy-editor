@@ -40,6 +40,7 @@ class AppFlowyEditor extends StatefulWidget {
     this.enableAutoComplete = false,
     this.enableSpellChecker = false,
     this.spellCheckConfiguration,
+    this.spellCheckStyle = const AppFlowySpellCheckStyle(),
     this.autoCompleteTextProvider,
     this.dropTargetStyle,
     this.disableSelectionService = false,
@@ -188,6 +189,10 @@ class AppFlowyEditor extends StatefulWidget {
   /// Configuration for spell checking behavior.
   /// Only used when enableSpellChecker is true.
   final AppFlowySpellCheckConfiguration? spellCheckConfiguration;
+
+  /// Appearance and labels of the spell check suggestions menu.
+  /// Only used when enableSpellChecker is true.
+  final AppFlowySpellCheckStyle spellCheckStyle;
 
   final AppFlowyAutoCompleteTextProvider? autoCompleteTextProvider;
 
@@ -391,6 +396,7 @@ class _AppFlowyEditorState extends State<AppFlowyEditor> {
     editorState.enableAutoComplete = widget.enableAutoComplete;
     editorState.enableSpellChecker = widget.enableSpellChecker;
     editorState.spellCheckConfiguration = widget.spellCheckConfiguration;
+    editorState.spellCheckStyle = widget.spellCheckStyle;
     if (widget.enableSpellChecker) {
       if (widget.spellCheckConfiguration != null) {
         await SpellChecker.instance.initialize(

@@ -296,6 +296,7 @@ class EditorState {
 
   bool enableSpellChecker = false;
   AppFlowySpellCheckConfiguration? spellCheckConfiguration;
+  AppFlowySpellCheckStyle spellCheckStyle = const AppFlowySpellCheckStyle();
 
   // whether the editor state should carry over the set alignment into new paragraphs
   bool keepParagraphAlignment = false;
