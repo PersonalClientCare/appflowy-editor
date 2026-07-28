@@ -21,6 +21,7 @@ dependencies:
   flutter_svg: "^2.0.6"
   html: ^0.15.5
   http: "^1.2.0"
+  hunspell_spell_check: ^0.1.1
   intl: "^0.20.2"
   keyboard_height_plugin: "^0.1.5"
   logging: "^1.2.0"
@@ -34,8 +35,6 @@ dependencies:
   universal_html: "^2.2.4"
   universal_platform: ^1.1.0
   url_launcher: "^6.1.111"
-  hunspell_spell_check:
-    git: https://github.com/PersonalClientCare/hunspell_spell_check
 
 dev_dependencies:
   awesome_lints:
