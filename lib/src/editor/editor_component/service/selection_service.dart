@@ -137,6 +137,7 @@ class SelectionGestureInterceptor {
   SelectionGestureInterceptor({
     required this.key,
     this.canTap,
+    this.canSecondaryTap,
     this.canDoubleTap,
     this.canTripleTap,
     this.canPanStart,
@@ -147,6 +148,11 @@ class SelectionGestureInterceptor {
   final String key;
 
   bool Function(TapDownDetails details)? canTap;
+
+  /// Return false to swallow a right click, e.g. when another widget already
+  /// showed its own menu for it.
+  bool Function(TapDownDetails details)? canSecondaryTap;
+
   bool Function(TapDownDetails details)? canDoubleTap;
   bool Function(TapDownDetails details)? canTripleTap;
   bool Function(DragStartDetails details)? canPanStart;

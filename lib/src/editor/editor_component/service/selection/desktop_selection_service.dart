@@ -333,6 +333,14 @@ class _DesktopSelectionServiceWidgetState
   }
 
   void _onSecondaryTapDown(TapDownDetails details) {
+    final canSecondaryTap = _interceptors.every(
+      (interceptor) => interceptor.canSecondaryTap?.call(details) ?? true,
+    );
+
+    if (!canSecondaryTap) {
+      return;
+    }
+
     final offset = details.globalPosition;
     final selection = editorState.selectionNotifier.value;
     final node = getNodeInOffset(offset);
