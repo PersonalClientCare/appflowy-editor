@@ -155,11 +155,21 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
         onDismiss: _removeOverlay,
         onSelected: (replacement) =>
             _replaceMisspelledWord(replacement, start, length),
+        onAddToDictionary: () => _addToDictionary(word),
       ),
     );
 
     HardwareKeyboard.instance.addHandler(_handleEscape);
     Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  Future<void> _addToDictionary(String word) async {
+    _removeOverlay();
+
+    await SpellChecker.instance.addCustomWord(word);
+    widget.misspelledCache[word] = false;
+
+    widget.editorState.reload();
   }
 
   Future<void> _replaceMisspelledWord(
@@ -244,6 +254,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
     required this.suggestions,
     required this.onSelected,
     required this.onDismiss,
+    required this.onAddToDictionary,
     required this.style,
   });
 
@@ -252,6 +263,7 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
   final List<String> suggestions;
   final ValueChanged<String> onSelected;
   final VoidCallback onDismiss;
+  final VoidCallback onAddToDictionary;
   final AppFlowySpellCheckStyle style;
 
   static const _screenPadding = 8.0;
@@ -328,6 +340,13 @@ class _SpellCheckSuggestionsMenu extends StatelessWidget {
                               ),
                       ),
                       Divider(height: 1.0, color: dividerColor),
+                      _SuggestionTile(
+                        label: style.addToDictionaryLabel,
+                        icon: style.addToDictionaryIcon ??
+                            const Icon(Icons.playlist_add, size: 18),
+                        highlightColor: highlight,
+                        onPressed: onAddToDictionary,
+                      ),
                       _SuggestionTile(
                         label: style.deleteLabel,
                         icon: const Icon(Icons.delete_outline, size: 18),
