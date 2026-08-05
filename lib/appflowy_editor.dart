@@ -35,3 +35,4 @@ export 'src/service/shortcut_event/key_mapping.dart';
 export 'src/service/shortcut_event/keybinding.dart';
 export 'src/service/spell_check/spell_check.dart';
 export 'src/service/spell_check/spell_check_style.dart';
+export 'src/service/spell_check/spell_check_word_cache.dart';

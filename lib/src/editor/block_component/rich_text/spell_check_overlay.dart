@@ -15,14 +15,12 @@ class SpellCheckOverlay extends StatefulWidget {
     required this.editorState,
     required this.node,
     required this.delegate,
-    required this.misspelledCache,
     this.style = const AppFlowySpellCheckStyle(),
   });
 
   final EditorState editorState;
   final Node node;
   final SelectableMixin delegate;
-  final Map<String, bool> misspelledCache;
 
   /// Appearance and labels of the suggestions menu.
   final AppFlowySpellCheckStyle style;
@@ -33,7 +31,6 @@ class SpellCheckOverlay extends StatefulWidget {
 
 class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
   OverlayEntry? _overlayEntry;
-  String? _menuWord;
 
   static const _menuVerticalOffset = 8.0;
   static const _maxSuggestions = 5;
@@ -75,7 +72,6 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
     _overlayEntry?.remove();
     _overlayEntry?.dispose();
     _overlayEntry = null;
-    _menuWord = null;
   }
 
   bool _handleEscape(KeyEvent event) {
@@ -128,7 +124,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
 
     final (:word, :start, :length) = wordData;
     if (!_isValidWordForSpellCheck(word)) return;
-    if (widget.misspelledCache[word] != true) return;
+    if (!SpellCheckWordCache.instance.isMisspelled(word)) return;
 
     _SpellCheckMenuClaim.claim(event.position);
     _showSuggestionsMenu(word, event.position, start, length);
@@ -145,7 +141,6 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
       maxSuggestions: _maxSuggestions,
     );
 
-    _menuWord = word;
     _overlayEntry = OverlayEntry(
       builder: (context) => _SpellCheckSuggestionsMenu(
         anchor: anchor.translate(0, _menuVerticalOffset),
@@ -167,7 +162,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
     _removeOverlay();
 
     await SpellChecker.instance.addCustomWord(word);
-    widget.misspelledCache[word] = false;
+    SpellCheckWordCache.instance.markCorrect(word);
 
     widget.editorState.reload();
   }
@@ -177,7 +172,6 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
     int start,
     int length,
   ) async {
-    final replacedWord = _menuWord;
     _removeOverlay();
 
     final transaction = widget.editorState.transaction;
@@ -192,11 +186,6 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
       Position(path: widget.node.path, offset: start + replacement.length),
     );
     await widget.editorState.apply(transaction);
-
-    // Clear the old word from cache since it's been replaced
-    if (replacedWord != null) {
-      widget.misspelledCache.remove(replacedWord);
-    }
   }
 
   @override

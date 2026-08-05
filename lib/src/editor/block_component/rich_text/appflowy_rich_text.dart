@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
@@ -165,20 +164,21 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
   void initState() {
     super.initState();
     confirmContextEnabled();
+    SpellCheckWordCache.instance.addListener(_onSpellCheckResults);
   }
 
   @override
   void dispose() {
-    // Cancel all pending spell check timers to prevent memory leaks
-    for (final timer in _debounceTimers.values) {
-      timer?.cancel();
-    }
-    _debounceTimers.clear();
+    SpellCheckWordCache.instance.removeListener(_onSpellCheckResults);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Rebuilt from scratch below, so a word that is no longer rendered stops
+    // waking this block up.
+    _renderedWords.clear();
+
     Widget child = Stack(
       children: [
         _buildPlaceholderText(context),
@@ -501,7 +501,6 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
       editorState: widget.editorState,
       node: widget.node,
       delegate: this,
-      misspelledCache: _misspelledCache,
       style: widget.editorState.spellCheckStyle,
     );
   }
@@ -711,18 +710,24 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     );
   }
 
-  final Map<String, bool> _misspelledCache = {};
-  final Map<String, Timer?> _debounceTimers = {};
-  static const int _maxCacheSize = 1000;
+  /// Words this block rendered in the last build, so a finished batch only
+  /// rebuilds the blocks that actually show one of the checked words.
+  final Set<String> _renderedWords = {};
+
+  void _onSpellCheckResults(Set<String> changedWords) {
+    if (!mounted) return;
+    if (!changedWords.any(_renderedWords.contains)) return;
+
+    setState(() {});
+  }
 
   // Unicode-aware so non-ASCII letters (ü, ß, é, ...) and combining marks
   // (NFD input, e.g. macOS dead keys) stay part of the word token.
+  //
+  // The named group tells word and separator tokens apart straight from the
+  // match, so the tokens do not have to be re-matched afterwards.
   static final _spellCheckTokenReg = RegExp(
-    r'[\p{L}\p{M}\p{N}_]+|[^\p{L}\p{M}\p{N}_]+',
-    unicode: true,
-  );
-  static final _spellCheckWordReg = RegExp(
-    r'^[\p{L}\p{M}\p{N}_]+$',
+    r'(?<word>[\p{L}\p{M}\p{N}_]+)|[^\p{L}\p{M}\p{N}_]+',
     unicode: true,
   );
 
@@ -735,18 +740,25 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     final textSpans = <InlineSpan>[];
     // Split the insert text into word and non-word tokens so we can
     // underline misspelled words and attach hover suggestion UI.
-    final tokens = _spellCheckTokenReg
-        .allMatches(textInsert.text)
-        .map((m) => m.group(0)!)
-        .toList();
+    final matches =
+        _spellCheckTokenReg.allMatches(textInsert.text).toList(growable: false);
+    final tokens = List<String>.generate(
+      matches.length,
+      (i) => matches[i].group(0)!,
+      growable: false,
+    );
+    final isWordToken = List<bool>.generate(
+      matches.length,
+      (i) => matches[i].namedGroup('word') != null,
+      growable: false,
+    );
     int innerIndex = 0;
 
     final config = spellCheckConfiguration;
 
     for (int i = 0; i < tokens.length; i++) {
       final token = tokens[i];
-      final isWord = _spellCheckWordReg.hasMatch(token);
-      if (isWord) {
+      if (isWordToken[i]) {
         final word = token;
 
         // Check if word should be spell-checked based on configuration
@@ -755,11 +767,9 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
         // If checkOnlyCompletedWords is true, only check if next token is whitespace/punctuation
         // Don't check the last token (still being typed)
         if (shouldCheck && config.checkOnlyCompletedWords) {
-          final isLastToken = i == tokens.length - 1;
-          final nextToken = isLastToken ? null : tokens[i + 1];
-          // Only check if there's a next token AND it's whitespace/punctuation (not a word)
-          shouldCheck =
-              nextToken != null && !_spellCheckWordReg.hasMatch(nextToken);
+          // Only check if there's a next token AND it's whitespace/punctuation
+          // (not a word). The last token is still being typed.
+          shouldCheck = i + 1 < tokens.length && !isWordToken[i + 1];
         }
 
         // Check exclude patterns
@@ -772,15 +782,21 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
           }
         }
 
-        // schedule async check for unknown words
-        // cache stored on state (to avoid repeated checks)
+        // Queue unknown words on the shared cache, which batches them and
+        // notifies us once per batch. Results are shared across every block,
+        // so a word is only ever handed to the engine once.
         // IMPORTANT: Pass the original word (not lowercase) so capital letter check works!
-        if (shouldCheck && !_misspelledCache.containsKey(word)) {
-          _checkWord(word);
+        if (shouldCheck) {
+          _renderedWords.add(word);
+          SpellCheckWordCache.instance.enqueue(
+            word,
+            debounce: config.debounceDelay,
+          );
         }
 
         // Only mark as misspelled if we've checked it and confirmed it's wrong
-        final isMisspelled = shouldCheck && _misspelledCache[word] == true;
+        final isMisspelled =
+            shouldCheck && SpellCheckWordCache.instance.isMisspelled(word);
 
         final spanStyle = isMisspelled
             ? textStyle.copyWith(
@@ -814,46 +830,6 @@ class _AppFlowyRichTextState extends State<AppFlowyRichText>
     }
 
     return textSpans;
-  }
-
-  Future<void> _checkWord(String word) async {
-    final debounceDelay = spellCheckConfiguration!.debounceDelay;
-
-    // Cancel existing timer for this word
-    _debounceTimers[word]?.cancel();
-
-    // If debounce delay is zero, check immediately
-    if (debounceDelay == Duration.zero) {
-      await _performSpellCheck(word);
-    } else {
-      // Schedule check after debounce delay
-      _debounceTimers[word] = Timer(debounceDelay, () async {
-        await _performSpellCheck(word);
-        _debounceTimers.remove(word);
-      });
-    }
-  }
-
-  Future<void> _performSpellCheck(String word) async {
-    try {
-      final exists = await SpellChecker.instance.checkWord(word);
-      final miss = !exists;
-
-      // avoid unnecessary setState
-      if (_misspelledCache[word] != miss) {
-        _misspelledCache[word] = miss;
-
-        // Limit cache size to prevent memory leak in long editing sessions
-        if (_misspelledCache.length > _maxCacheSize) {
-          _misspelledCache.clear();
-        }
-
-        if (mounted) setState(() {});
-      }
-    } catch (e) {
-      // treat as known on error
-      _misspelledCache[word] = false;
-    }
   }
 
   TextSelection? textSelectionFromEditorSelection(Selection? selection) {
