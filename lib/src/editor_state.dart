@@ -32,6 +32,10 @@ const selectionExtraInfoDoNotAttachTextService =
     'selectionExtraInfoDoNotAttachTextService';
 const _selectionDragModeKey = 'selection_drag_mode';
 
+/// The border radius for selection area rendering.
+/// The type of this value is double.
+const selectionExtraInfoSelectionRadius = 'selectionExtraInfoSelectionRadius';
+
 class ApplyOptions {
   const ApplyOptions({
     this.recordUndo = true,
@@ -434,11 +438,16 @@ class EditorState {
   Future<void> apply(
     Transaction transaction, {
     bool isRemote = false,
-    ApplyOptions options = const ApplyOptions(recordUndo: true),
+    ApplyOptions options = const ApplyOptions(),
     bool withUpdateSelection = true,
     bool skipHistoryDebounce = false,
+    bool skipEditableCheck = false,
   }) async {
-    if (!editable || isDisposed) {
+    if (isDisposed) {
+      return;
+    }
+
+    if (!editable && !skipEditableCheck) {
       return;
     }
 
@@ -746,6 +755,8 @@ class EditorState {
         if (!mapEquals(op.attributes, op.oldAttributes)) {
           document.update(op.path, op.attributes);
         }
+      } else if (op is UpdateNodeTypeOperation) {
+        _applyUpdateNodeTypeOperation(op);
       } else if (op is DeleteOperation) {
         document.delete(op.path, op.nodes.length);
       } else if (op is UpdateTextOperation) {
@@ -777,6 +788,8 @@ class EditorState {
             );
           }
         }
+      } else if (op is UpdateNodeTypeOperation) {
+        _applyUpdateNodeTypeOperation(op);
       } else if (op is UpdateOperation) {
         document.update(op.path, op.attributes);
       } else if (op is DeleteOperation) {
@@ -799,5 +812,33 @@ class EditorState {
     }
 
     return selection;
+  }
+
+  bool _applyUpdateNodeTypeOperation(UpdateNodeTypeOperation op) {
+    final node = _resolveUpdateNodeTypeTarget(op);
+    if (node == null) {
+      return false;
+    }
+
+    return document.updateNodeType(node.path, op.type, op.attributes);
+  }
+
+  Node? _resolveUpdateNodeTypeTarget(UpdateNodeTypeOperation op) {
+    final pathNode = document.nodeAtPath(op.path);
+    if (op.nodeId.isEmpty || pathNode?.id == op.nodeId) {
+      return pathNode;
+    }
+
+    final iterator = NodeIterator(
+      document: document,
+      startNode: document.root,
+    );
+    while (iterator.moveNext()) {
+      if (iterator.current.id == op.nodeId) {
+        return iterator.current;
+      }
+    }
+
+    return null;
   }
 }
