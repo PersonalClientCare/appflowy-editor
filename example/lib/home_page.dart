@@ -436,22 +436,26 @@ class _HomePageState extends State<HomePage> {
       }
     } else {
       // for desktop
-      final path = await FilePicker.platform.saveFile(
+
+      var bytes = Uint8List.fromList(result.codeUnits);
+
+      if (fileType == ExportFileType.pdf) {
+        final pdf = await PdfHTMLEncoder(
+          fontFallback: [
+            await PdfGoogleFonts.notoColorEmoji(),
+            await PdfGoogleFonts.notoColorEmojiRegular(),
+          ],
+        ).convert(result);
+
+        bytes = await pdf.save();
+      }
+
+      final path = await FilePicker.saveFile(
         fileName: 'document.${fileType.extension}',
+        bytes: bytes,
       );
+
       if (path != null) {
-        await File(path).writeAsString(result);
-        if (fileType == ExportFileType.pdf) {
-          final pdf = await PdfHTMLEncoder(
-            fontFallback: [
-              await PdfGoogleFonts.notoColorEmoji(),
-              await PdfGoogleFonts.notoColorEmojiRegular(),
-            ],
-          ).convert(result);
-
-          await File(path).writeAsBytes(await pdf.save());
-        }
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -464,20 +468,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _importFile(ExportFileType fileType) async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
+    final result = await FilePicker.pickFile(
       allowedExtensions: [fileType.extension],
       type: FileType.custom,
     );
     var plainText = '';
     if (!kIsWeb) {
-      final path = result?.files.single.path;
+      final path = result?.path;
       if (path == null) {
         return;
       }
       plainText = await File(path).readAsString();
     } else {
-      final bytes = result?.files.first.bytes;
+      final bytes = await result?.readAsBytes();
       if (bytes == null) {
         return;
       }

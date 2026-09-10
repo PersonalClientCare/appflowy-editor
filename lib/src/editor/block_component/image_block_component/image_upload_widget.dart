@@ -335,12 +335,11 @@ class _UploadImageMenuState extends State<UploadImageMenu> {
               dialogTitle: '',
               type: kIsWeb ? fp.FileType.custom : fp.FileType.image,
               allowedExtensions: kIsWeb ? allowedExtensions : null,
-              withData: kIsWeb,
             );
             if (result != null && result.files.isNotEmpty) {
+              final bytes = await result.files.first.readAsBytes();
               setState(() {
-                final bytes = result.files.first.bytes;
-                if (kIsWeb && bytes != null) {
+                if (kIsWeb) {
                   _imagePathOrContent = base64String(bytes);
                 } else {
                   _imagePathOrContent = result.files.first.path;

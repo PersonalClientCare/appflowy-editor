@@ -30,6 +30,7 @@ class SpellCheckOverlay extends StatefulWidget {
 }
 
 class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
+  // ignore: dispose_fields
   OverlayEntry? _overlayEntry;
 
   static const _menuVerticalOffset = 8.0;
