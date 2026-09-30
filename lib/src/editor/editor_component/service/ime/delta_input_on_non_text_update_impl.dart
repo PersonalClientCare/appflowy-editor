@@ -56,10 +56,26 @@ Future<void> onNonTextUpdate(
   } else if (PlatformExtension.isAndroid) {
     await handleAndroidNonTextUpdate(nonTextUpdate, editorState);
   } else if (PlatformExtension.isIOS) {
-    // on iOS, the cursor movement will trigger the `onFloatingCursor` event.
-    // so we don't need to handle the non-text update here.
-    AppFlowyEditorLog.input.debug('[iOS] onNonTextUpdate: $nonTextUpdate');
+    await handleIOSNonTextUpdate(nonTextUpdate, editorState);
   }
+}
+
+/// On iOS, the cursor movement will trigger the `onFloatingCursor` event, so
+/// the only non-text update to handle is "Select All" from the system edit
+/// menu, which selects the whole text of the input connection.
+@visibleForTesting
+Future<bool> handleIOSNonTextUpdate(
+  TextEditingDeltaNonTextUpdate nonTextUpdate,
+  EditorState editorState,
+) async {
+  AppFlowyEditorLog.input.debug('[iOS] onNonTextUpdate: $nonTextUpdate');
+
+  if (editorState.selection == null ||
+      !_isSelectAllNonTextUpdate(nonTextUpdate)) {
+    return false;
+  }
+
+  return selectAllCommand.execute(editorState) == KeyEventResult.handled;
 }
 
 @visibleForTesting
