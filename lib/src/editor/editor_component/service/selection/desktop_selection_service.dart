@@ -596,6 +596,8 @@ class _DesktopSelectionServiceWidgetState
     final selection = editorState.selectionNotifier.value;
     if (selection == null) {
       clearSelection();
+    } else {
+      currentSelection.value = selection;
     }
   }
 
