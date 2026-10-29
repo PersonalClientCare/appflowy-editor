@@ -132,3 +132,4 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 
 .fvm/
+.vfox/
