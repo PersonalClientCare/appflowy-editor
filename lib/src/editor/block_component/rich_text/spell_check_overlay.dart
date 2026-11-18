@@ -150,7 +150,7 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
         style: widget.style,
         onDismiss: _removeOverlay,
         onSelected: (replacement) =>
-            _replaceMisspelledWord(replacement, start, length),
+            _replaceMisspelledWord(replacement, word, start, length),
         onAddToDictionary: () => _addToDictionary(word),
       ),
     );
@@ -170,23 +170,46 @@ class _SpellCheckOverlayState extends State<SpellCheckOverlay> {
 
   Future<void> _replaceMisspelledWord(
     String replacement,
+    String word,
     int start,
     int length,
   ) async {
     _removeOverlay();
 
+    final node = widget.node;
+    final text = node.delta?.toPlainText();
+    // The text may have changed since the menu opened, so only replace the
+    // range that still holds the misspelled word.
+    if (text == null ||
+        start < 0 ||
+        start + length > text.length ||
+        text.substring(start, start + length) != word) {
+      widget.editorState.service.keyboardService?.enable();
+      return;
+    }
+
+    // The suggestion's period replaces the period already typed after the word.
+    final hasExistingTrailingPeriod =
+        replacement.endsWith('.') &&
+        start + length < text.length &&
+        text[start + length] == '.';
+    final replacementText = hasExistingTrailingPeriod
+        ? replacement.substring(0, replacement.length - 1)
+        : replacement;
+
     final transaction = widget.editorState.transaction;
     transaction.replaceText(
-      widget.node,
+      node,
       start,
       length,
-      replacement,
-      attributes: widget.node.attributes,
+      replacementText,
+      attributes: node.attributes,
     );
     transaction.afterSelection = Selection.collapsed(
-      Position(path: widget.node.path, offset: start + replacement.length),
+      Position(path: node.path, offset: start + replacement.length),
     );
     await widget.editorState.apply(transaction);
+    widget.editorState.service.keyboardService?.enable();
   }
 
   @override
